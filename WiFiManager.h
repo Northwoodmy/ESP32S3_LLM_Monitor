@@ -1,6 +1,6 @@
 /*
  * WiFiManager.h - WiFi管理器类头文件
- * ESP32S3监控项目 - WiFi配置模块
+ * ESP32S3_LLM_Monitor项目 - WiFi配置模块
  */
 
 #ifndef WIFIMANAGER_H

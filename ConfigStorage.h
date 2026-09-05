@@ -1,6 +1,6 @@
 /*
  * ConfigStorage.h - NVS配置存储任务管理器头文件
- * ESP32S3监控项目 - 配置存储模块
+ * ESP32S3_LLM_Monitor项目 - 配置存储模块
  * 基于FreeRTOS任务实现，确保NVS操作的线程安全性
  */
 
@@ -108,7 +108,7 @@ struct SystemConfigData {
     String deviceName;
     int refreshRate;
     
-    SystemConfigData() : deviceName("ESP32S3-Monitor"), refreshRate(1000) {}
+    SystemConfigData() : deviceName("ESP32S3-LLM-Monitor"), refreshRate(1000) {}
     SystemConfigData(const String& name, int rate) : deviceName(name), refreshRate(rate) {}
 };
 

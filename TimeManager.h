@@ -1,6 +1,6 @@
 /*
  * TimeManager.h - 时间管理器类头文件
- * ESP32S3监控项目 - NTP网络时间同步模块
+ * ESP32S3_LLM_Monitor项目 - NTP网络时间同步模块
  */
 
 #ifndef TIMEMANAGER_H

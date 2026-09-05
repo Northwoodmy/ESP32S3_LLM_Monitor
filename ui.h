@@ -29,15 +29,11 @@ extern "C" {
 ///////////////////// SCREENS ////////////////////
 
 #include "ui_standbySCREEN.h"
-#include "ui_totalpowerSCREEN.h"
-#include "ui_prot1SCREEN.h"
-#include "ui_port1SCREEN12.h"
-#include "ui_prot2SCREEN.h"
-#include "ui_prot3SCREEN.h"
-#include "ui_prot4SCREEN.h"
-#include "ui_port2SCREEN22.h"
-#include "ui_port3SCREEN32.h"
-#include "ui_port4SCREEN42.h"
+#include "ui_overviewSCREEN.h"
+#include "ui_dsMainSCREEN.h"
+#include "ui_dsInfoSCREEN.h"
+#include "ui_kimiMainSCREEN.h"
+#include "ui_kimiInfoSCREEN.h"
 
 ///////////////////// VARIABLES ////////////////////
 

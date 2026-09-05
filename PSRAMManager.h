@@ -1,6 +1,6 @@
 /*
  * PSRAMManager.h - PSRAM内存管理器类头文件
- * ESP32S3监控项目 - PSRAM内存管理模块
+ * ESP32S3_LLM_Monitor项目 - PSRAM内存管理模块
  */
 
 #ifndef PSRAMMANAGER_H

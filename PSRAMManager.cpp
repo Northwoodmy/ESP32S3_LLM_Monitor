@@ -1,6 +1,6 @@
 /*
  * PSRAMManager.cpp - PSRAM内存管理器类实现文件
- * ESP32S3监控项目 - PSRAM内存管理模块
+ * ESP32S3_LLM_Monitor项目 - PSRAM内存管理模块
  */
 
 #include "PSRAMManager.h"

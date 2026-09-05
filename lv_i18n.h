@@ -1,5 +1,5 @@
 // Minimal internationalization header for SquareLine Studio UI
-// This file provides basic i18n support for the ESP32S3 Monitor project
+// This file provides basic i18n support for the ESP32S3 LLM Monitor project
 
 #ifndef LV_I18N_H
 #define LV_I18N_H

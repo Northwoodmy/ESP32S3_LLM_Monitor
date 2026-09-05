@@ -1,6 +1,6 @@
 /*
  * WebServerManager_WeatherSettings.cpp - Web服务器天气设置页面实现
- * ESP32S3监控项目 - 天气设置页面和功能模块
+ * ESP32S3_LLM_Monitor项目 - 天气设置页面和功能模块
  */
 
 #include "WebServerManager.h"
@@ -11,7 +11,7 @@ String WebServerManager::getWeatherSettingsHTML() {
     html += "<head>\n";
     html += "    <meta charset=\"UTF-8\">\n";
     html += "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n";
-    html += "    <title>天气设置 - ESP32S3 Monitor</title>\n";
+    html += "    <title>天气设置 - ESP32S3 LLM Monitor</title>\n";
     html += "    <style>\n";
     html += getCSS();
     html += getWeatherSettingsCSS();

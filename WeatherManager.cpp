@@ -634,7 +634,7 @@ bool WeatherManager::makeHttpRequest(const String& url, String& response) {
     }
     
     // 添加HTTP头
-    http.addHeader("User-Agent", "ESP32S3-Monitor/1.0");
+    http.addHeader("User-Agent", "ESP32S3-LLM-Monitor/1.0");
     http.addHeader("Accept", "application/json");
     
     // 发起GET请求

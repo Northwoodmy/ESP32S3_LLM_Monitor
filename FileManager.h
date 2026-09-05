@@ -1,6 +1,6 @@
 /*
  * FileManager.h - SPIFFS文件管理器类头文件
- * ESP32S3监控项目 - 文件管理模块
+ * ESP32S3_LLM_Monitor项目 - 文件管理模块
  */
 
 #ifndef FILEMANAGER_H

@@ -34,15 +34,11 @@ void ui_init(void)
                                                true, LV_FONT_DEFAULT);
     lv_disp_set_theme(dispp, theme);
     ui_standbySCREEN_screen_init();
-    ui_totalpowerSCREEN_screen_init();
-    ui_prot1SCREEN_screen_init();
-    ui_port1SCREEN12_screen_init();
-    ui_prot2SCREEN_screen_init();
-    ui_prot3SCREEN_screen_init();
-    ui_prot4SCREEN_screen_init();
-    ui_port2SCREEN22_screen_init();
-    ui_port3SCREEN32_screen_init();
-    ui_port4SCREEN42_screen_init();
+    ui_overviewSCREEN_screen_init();
+    ui_dsMainSCREEN_screen_init();
+    ui_dsInfoSCREEN_screen_init();
+    ui_kimiMainSCREEN_screen_init();
+    ui_kimiInfoSCREEN_screen_init();
     ui____initial_actions0 = lv_obj_create(NULL);
     lv_disp_load_scr(ui_standbySCREEN);
 }
@@ -50,27 +46,19 @@ void ui_init(void)
 void ui_destroy(void)
 {
     ui_standbySCREEN_screen_destroy();
-    ui_totalpowerSCREEN_screen_destroy();
-    ui_prot1SCREEN_screen_destroy();
-    ui_port1SCREEN12_screen_destroy();
-    ui_prot2SCREEN_screen_destroy();
-    ui_prot3SCREEN_screen_destroy();
-    ui_prot4SCREEN_screen_destroy();
-    ui_port2SCREEN22_screen_destroy();
-    ui_port3SCREEN32_screen_destroy();
-    ui_port4SCREEN42_screen_destroy();
+    ui_overviewSCREEN_screen_destroy();
+    ui_dsMainSCREEN_screen_destroy();
+    ui_dsInfoSCREEN_screen_destroy();
+    ui_kimiMainSCREEN_screen_destroy();
+    ui_kimiInfoSCREEN_screen_destroy();
 }
 
 void ui_relocalize(void)
 {
     ui_standbySCREEN_screen_relocalize();
-    ui_totalpowerSCREEN_screen_relocalize();
-    ui_prot1SCREEN_screen_relocalize();
-    ui_port1SCREEN12_screen_relocalize();
-    ui_prot2SCREEN_screen_relocalize();
-    ui_prot3SCREEN_screen_relocalize();
-    ui_prot4SCREEN_screen_relocalize();
-    ui_port2SCREEN22_screen_relocalize();
-    ui_port3SCREEN32_screen_relocalize();
-    ui_port4SCREEN42_screen_relocalize();
+    ui_overviewSCREEN_screen_relocalize();
+    ui_dsMainSCREEN_screen_relocalize();
+    ui_dsInfoSCREEN_screen_relocalize();
+    ui_kimiMainSCREEN_screen_relocalize();
+    ui_kimiInfoSCREEN_screen_relocalize();
 }

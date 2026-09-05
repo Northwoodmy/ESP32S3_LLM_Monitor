@@ -1,6 +1,6 @@
 /*
  * AudioManager.cpp - 音频管理器类实现文件
- * ESP32S3监控项目 - 音频播放管理模块
+ * ESP32S3_LLM_Monitor项目 - 音频播放管理模块
  */
 
 #include "AudioManager.h"

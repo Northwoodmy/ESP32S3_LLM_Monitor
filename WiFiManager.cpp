@@ -1,6 +1,6 @@
 /*
  * WiFiManager.cpp - WiFi管理器类实现文件
- * ESP32S3监控项目 - WiFi配置模块
+ * ESP32S3_LLM_Monitor项目 - WiFi配置模块
  */
 
 #include "WiFiManager.h"

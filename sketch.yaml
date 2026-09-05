@@ -1,0 +1,4 @@
+# ESP32S3_LLM_Monitor - arduino-cli 默认构建配置
+# 有此文件后, 在项目目录直接运行 `arduino-cli compile` / `arduino-cli upload` 即可,
+# 无需再手动输入冗长的 --fqbn 参数
+default_fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PartitionScheme=custom,PSRAM=opi,CPUFreq=240"

@@ -1,6 +1,6 @@
 /*
  * WebServerManager.h - Web服务器管理器类头文件
- * ESP32S3监控项目 - Web服务器模块
+ * ESP32S3_LLM_Monitor项目 - Web服务器模块
  */
 
 #ifndef WEBSERVERMANAGER_H
@@ -12,7 +12,6 @@
 #include "freertos/task.h"
 #include "ConfigStorage.h"
 #include "WiFiManager.h"
-#include "OTAManager.h"
 #include "FileManager.h"
 
 // 前向声明
@@ -20,10 +19,11 @@ class PSRAMManager;
 class DisplayManager;
 class WeatherManager;
 class LocationManager;
+class LLMMonitor;
 
 class WebServerManager {
 public:
-    WebServerManager(WiFiManager* wifiMgr, ConfigStorage* configStore, OTAManager* otaMgr, FileManager* fileMgr);
+    WebServerManager(WiFiManager* wifiMgr, ConfigStorage* configStore, FileManager* fileMgr);
     ~WebServerManager();
     
     // 初始化Web服务器
@@ -40,6 +40,9 @@ public:
     
     // 设置定位管理器
     void setLocationManager(LocationManager* locationManager);
+
+    // 设置大模型监控器
+    void setLLMMonitor(LLMMonitor* llmMonitor);
     
     // 启动服务器
     void start();
@@ -54,12 +57,12 @@ private:
     WebServer* server;
     WiFiManager* wifiManager;
     ConfigStorage* configStorage;
-    OTAManager* otaManager;
     FileManager* fileManager;
     PSRAMManager* m_psramManager;
     DisplayManager* m_displayManager;
     WeatherManager* m_weatherManager;
     LocationManager* m_locationManager;
+    LLMMonitor* m_llmMonitor;
     TaskHandle_t serverTaskHandle;
     bool isRunning;
     
@@ -69,7 +72,6 @@ private:
     // HTTP处理函数
     void handleRoot();
     void handleWiFiConfig();
-    void handleOTAPage();
     void handleWiFiScan();
     void handleSystemInfo();
     void handleRestart();
@@ -87,18 +89,7 @@ private:
     void handleConnectWiFiConfig();
     void handleUpdateWiFiPriority();
     void handleSetWiFiPriorities();
-    
-    // OTA升级相关API
-    void handleOTAUpload();
-    void handleOTAStatus();
-    void handleOTAReboot();
-    
-    // 服务器OTA升级相关API
-    void handleServerOTAStart();
-    void handleServerOTAStatus();
-    void handleServerFirmwareList();
-    void handleServerFirmwareVersion();
-    
+
     // 文件管理相关API
     void handleFileManager();
     void handleFileList();
@@ -138,41 +129,33 @@ private:
     void handleSetLocationApiKey();
     void handleLocationNow();
     
-    // 服务器设置相关API
-    void handleServerSettingsPage();
-    void handleGetServerConfig();
-    void handleSetServerConfig();
-    void handleTestServerConnection();
-    void handleGetServerData();
-    void handleMDNSScanServers();  // mDNS扫描服务器
-    
+    // 大模型设置相关API
+    void handleLLMSettingsPage();
+    void handleGetLLMConfig();
+    void handleSetLLMConfig();
+    void handleTestLLMConnection();
+    void handleGetLLMStatus();
+
     // 屏幕设置相关API
     void handleScreenSettings();
     void handleGetScreenSettings();
     void handleSetScreenSettings();
     void handleGetCurrentRotation();
-    
-    // 主题设置相关API
-    void handleGetThemeSettings();
-    void handleSetThemeSettings();
-    
+
     // 获取主页HTML
     String getIndexHTML();
-    
+
     // 获取文件管理器HTML
     String getFileManagerHTML();
-    
-    // 获取OTA升级页面HTML
-    String getOTAPageHTML();
-    
+
     // 获取系统设置页面HTML
     String getSystemSettingsHTML();
     
     // 获取天气设置页面HTML
     String getWeatherSettingsHTML();
     
-    // 获取服务器设置页面HTML
-    String getServerSettingsHTML();
+    // 获取大模型设置页面HTML
+    String getLLMSettingsHTML();
     
     // 获取CSS样式
     String getCSS();
@@ -182,10 +165,7 @@ private:
     
     // 获取JavaScript代码
     String getJavaScript();
-    
-    // 获取OTA JavaScript代码
-    String getOTAJavaScript();
-    
+
     // 获取系统设置JavaScript代码
     String getSystemSettingsJavaScript();
     
@@ -198,15 +178,12 @@ private:
     // 获取天气设置CSS样式
     String getWeatherSettingsCSS();
     
-    // 获取服务器设置CSS样式
-    String getServerSettingsCSS();
-    
-    // 获取服务器设置JavaScript代码
-    String getServerSettingsJavaScript();
-    
-    // 获取OTA页面CSS样式
-    String getOTAPageCSS();
-    
+    // 获取大模型设置CSS样式
+    String getLLMSettingsCSS();
+
+    // 获取大模型设置JavaScript代码
+    String getLLMSettingsJavaScript();
+
     // 获取屏幕设置页面HTML
     String getScreenSettingsHTML();
     

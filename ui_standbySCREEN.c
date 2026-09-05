@@ -14,6 +14,7 @@ lv_obj_t * ui_dataLabel = NULL;
 lv_obj_t * ui_Container3 = NULL;
 lv_obj_t * ui_temperatureLabel = NULL;
 lv_obj_t * ui_Label9 = NULL;
+lv_obj_t * ui_costLabel = NULL;
 lv_obj_t * ui_weatherLabel = NULL;
 lv_obj_t * ui_Container67 = NULL;
 lv_obj_t * ui_weekLabel = NULL;
@@ -24,7 +25,7 @@ void ui_event_standbySCREEN(lv_event_t * e)
 
     if(event_code == LV_EVENT_GESTURE &&  lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_LEFT) {
         lv_indev_wait_release(lv_indev_get_act());
-        _ui_screen_change(&ui_totalpowerSCREEN, LV_SCR_LOAD_ANIM_MOVE_LEFT, 500, 0, &ui_totalpowerSCREEN_screen_init);
+        _ui_screen_change(&ui_overviewSCREEN, LV_SCR_LOAD_ANIM_MOVE_LEFT, 500, 0, &ui_overviewSCREEN_screen_init);
     }
     if(event_code == LV_EVENT_GESTURE &&  lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_RIGHT) {
         lv_indev_wait_release(lv_indev_get_act());
@@ -163,6 +164,17 @@ void ui_standbySCREEN_screen_init(void)
     lv_obj_set_style_text_opa(ui_weekLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_weekLabel, &ui_font_daoli26zhong, LV_PART_MAIN | LV_STATE_DEFAULT);
 
+    ui_costLabel = lv_label_create(ui_standbywallpaper);
+    lv_obj_set_width(ui_costLabel, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_costLabel, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_costLabel, 0);
+    lv_obj_set_y(ui_costLabel, -50);
+    lv_obj_set_align(ui_costLabel, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_costLabel, "Cost: -- CNY");
+    lv_obj_set_style_text_color(ui_costLabel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_costLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_costLabel, &ui_font_daoli26zhong, LV_PART_MAIN | LV_STATE_DEFAULT);
+
     lv_obj_add_event_cb(ui_standbySCREEN, ui_event_standbySCREEN, LV_EVENT_ALL, NULL);
 
 }
@@ -184,6 +196,7 @@ void ui_standbySCREEN_screen_destroy(void)
     ui_weatherLabel = NULL;
     ui_Container67 = NULL;
     ui_weekLabel = NULL;
+    ui_costLabel = NULL;
 
 }
 

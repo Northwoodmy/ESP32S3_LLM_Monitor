@@ -1,6 +1,6 @@
 /*
  * ConfigStorage.cpp - NVS配置存储任务管理器实现文件
- * ESP32S3监控项目 - 配置存储模块
+ * ESP32S3_LLM_Monitor项目 - 配置存储模块
  * 基于FreeRTOS任务实现，确保NVS操作的线程安全性
  */
 
@@ -1068,7 +1068,7 @@ bool ConfigStorage::loadSystemConfig(String& deviceName, int& refreshRate) {
         return false;
     }
     
-    deviceName = preferences.getString(DEVICE_NAME_KEY, "ESP32S3-Monitor");
+    deviceName = preferences.getString(DEVICE_NAME_KEY, "ESP32S3-LLM-Monitor");
     refreshRate = preferences.getInt(REFRESH_RATE_KEY, 1000);
     
     preferences.end();

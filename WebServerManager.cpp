@@ -1,6 +1,6 @@
 /*
  * WebServerManager.cpp - Web服务器管理器类实现文件
- * ESP32S3监控项目 - Web服务器模块
+ * ESP32S3_LLM_Monitor项目 - Web服务器模块
  */
 
 #include "WebServerManager.h"
@@ -9,21 +9,21 @@
 #include "DisplayManager.h"
 #include "WeatherManager.h"
 #include "LocationManager.h"
+#include "LLMMonitor.h"
 #include "Arduino.h"
 #include <HTTPClient.h>
 #include <WiFiClient.h>
-#include "MDNSScanner.h"
 
-WebServerManager::WebServerManager(WiFiManager* wifiMgr, ConfigStorage* configStore, OTAManager* otaMgr, FileManager* fileMgr) :
+WebServerManager::WebServerManager(WiFiManager* wifiMgr, ConfigStorage* configStore, FileManager* fileMgr) :
     server(nullptr),
     wifiManager(wifiMgr),
     configStorage(configStore),
-    otaManager(otaMgr),
     fileManager(fileMgr),
     m_psramManager(nullptr),
     m_displayManager(nullptr),
     m_weatherManager(nullptr),
     m_locationManager(nullptr),
+    m_llmMonitor(nullptr),
     serverTaskHandle(nullptr),
     isRunning(false) {
     server = new WebServer(80);
@@ -48,7 +48,6 @@ void WebServerManager::init() {
     // 设置路由处理函数
     server->on("/", [this]() { handleRoot(); });
     server->on("/config", [this]() { handleWiFiConfig(); });
-    server->on("/ota", [this]() { handleOTAPage(); });
     server->on("/scan", [this]() { handleWiFiScan(); });
     server->on("/info", [this]() { handleSystemInfo(); });
     server->on("/restart", [this]() { handleRestart(); });
@@ -61,20 +60,7 @@ void WebServerManager::init() {
     server->on("/connect-wifi", HTTP_POST, [this]() { handleConnectWiFiConfig(); });
     server->on("/update-wifi-priority", HTTP_POST, [this]() { handleUpdateWiFiPriority(); });
     server->on("/set-wifi-priorities", HTTP_POST, [this]() { handleSetWiFiPriorities(); });
-    server->on("/ota-upload", HTTP_POST, [this]() { 
-        // POST请求完成后的响应处理
-        printf("OTA上传POST请求完成，发送响应\n");
-        server->send(200, "application/json", otaManager->getStatusJSON());
-    }, [this]() { handleOTAUpload(); });
-    server->on("/ota-status", HTTP_GET, [this]() { handleOTAStatus(); });
-    server->on("/ota-reboot", HTTP_POST, [this]() { handleOTAReboot(); });
-    
-    // 服务器OTA升级相关路由
-    server->on("/api/ota/server-start", HTTP_POST, [this]() { handleServerOTAStart(); });
-    server->on("/api/ota/server-status", HTTP_GET, [this]() { handleServerOTAStatus(); });
-    server->on("/api/ota/firmware-list", HTTP_GET, [this]() { handleServerFirmwareList(); });
-    server->on("/api/ota/firmware-version", HTTP_GET, [this]() { handleServerFirmwareVersion(); });
-    
+
     // 文件管理路由
     server->on("/files", HTTP_GET, [this]() { handleFileManager(); });
     server->on("/api/files", HTTP_GET, [this]() { handleFileList(); });
@@ -122,18 +108,13 @@ void WebServerManager::init() {
     server->on("/api/screen/settings", HTTP_GET, [this]() { handleGetScreenSettings(); });
     server->on("/api/screen/settings", HTTP_POST, [this]() { handleSetScreenSettings(); });
     server->on("/api/screen/rotation", HTTP_GET, [this]() { handleGetCurrentRotation(); });
-    
-    // 主题设置路由
-    server->on("/api/theme/settings", HTTP_GET, [this]() { handleGetThemeSettings(); });
-    server->on("/api/theme/settings", HTTP_POST, [this]() { handleSetThemeSettings(); });
-    
-    // 服务器设置路由
-    server->on("/server-settings", [this]() { handleServerSettingsPage(); });
-    server->on("/api/server/config", HTTP_GET, [this]() { handleGetServerConfig(); });
-    server->on("/api/server/config", HTTP_POST, [this]() { handleSetServerConfig(); });
-    server->on("/api/server/test", HTTP_POST, [this]() { handleTestServerConnection(); });
-    server->on("/api/server/data", HTTP_GET, [this]() { handleGetServerData(); });
-    server->on("/api/server/mdns-scan", HTTP_GET, [this]() { handleMDNSScanServers(); });
+
+    // 大模型设置路由
+    server->on("/llm-settings", [this]() { handleLLMSettingsPage(); });
+    server->on("/api/llm/config", HTTP_GET, [this]() { handleGetLLMConfig(); });
+    server->on("/api/llm/config", HTTP_POST, [this]() { handleSetLLMConfig(); });
+    server->on("/api/llm/test", HTTP_POST, [this]() { handleTestLLMConnection(); });
+    server->on("/api/llm/status", HTTP_GET, [this]() { handleGetLLMStatus(); });
     
     server->onNotFound([this]() { handleNotFound(); });
     
@@ -154,6 +135,10 @@ void WebServerManager::setWeatherManager(WeatherManager* weatherManager) {
 
 void WebServerManager::setLocationManager(LocationManager* locationManager) {
     m_locationManager = locationManager;
+}
+
+void WebServerManager::setLLMMonitor(LLMMonitor* llmMonitor) {
+    m_llmMonitor = llmMonitor;
 }
 
 void WebServerManager::start() {
@@ -236,11 +221,6 @@ void WebServerManager::handleWiFiConfig() {
     server->send(200, "text/html", getIndexHTML());
 }
 
-void WebServerManager::handleOTAPage() {
-    printf("处理OTA页面请求\n");
-    server->send(200, "text/html", getOTAPageHTML());
-}
-
 void WebServerManager::handleWiFiScan() {
     printf("处理WiFi扫描请求\n");
     
@@ -266,7 +246,7 @@ void WebServerManager::handleSystemInfo() {
     printf("处理系统信息请求\n");
     
     DynamicJsonDocument doc(1024);
-    doc["device"] = "ESP32S3 Monitor";
+    doc["device"] = "ESP32S3 LLM Monitor";
             doc["version"] = VERSION_STRING;
     doc["chipModel"] = ESP.getChipModel();
     doc["chipRevision"] = ESP.getChipRevision();
@@ -359,7 +339,7 @@ void WebServerManager::handleAPI() {
     
     DynamicJsonDocument doc(512);
     doc["status"] = "ok";
-    doc["message"] = "ESP32S3 Monitor API";
+    doc["message"] = "ESP32S3 LLM Monitor API";
     doc["endpoints"] = "/scan, /info, /save, /status, /restart, /reset";
     
     String response;
@@ -594,78 +574,6 @@ void WebServerManager::handleConnectWiFiConfig() {
     String response;
     serializeJson(doc, response);
     server->send(200, "application/json", response);
-}
-
-void WebServerManager::handleOTAUpload() {
-    HTTPUpload& upload = server->upload();
-    
-    if (upload.status == UPLOAD_FILE_START) {
-        printf("处理OTA固件上传请求\n");
-        printf("开始OTA文件上传: %s\n", upload.filename.c_str());
-        
-        // ESP32的WebServer在START阶段totalSize通常为0，所以使用动态大小
-        if (!otaManager->beginOTA(0)) {  // 使用0表示动态大小
-            printf("OTA开始失败\n");
-            return;
-        }
-        
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (!otaManager->writeOTAData(upload.buf, upload.currentSize)) {
-            printf("写入OTA数据失败\n");
-            return;
-        }
-        
-    } else if (upload.status == UPLOAD_FILE_END) {
-        printf("OTA文件上传结束，总大小: %u 字节\n", upload.totalSize);
-        
-        // 在结束时更新实际的文件大小
-        if (!otaManager->setActualSize(upload.totalSize)) {
-            printf("设置实际文件大小失败\n");
-            return;
-        }
-        
-        if (otaManager->endOTA()) {
-            printf("OTA升级成功完成\n");
-        } else {
-            printf("OTA升级失败\n");
-        }
-        
-    } else if (upload.status == UPLOAD_FILE_ABORTED) {
-        printf("OTA文件上传被中止\n");
-        otaManager->abortOTA();
-    }
-    
-    // 不在upload回调中发送响应，而是在POST处理函数中统一处理
-}
-
-void WebServerManager::handleOTAStatus() {
-    String statusJson = otaManager->getStatusJSON();
-    server->send(200, "application/json", statusJson);
-}
-
-void WebServerManager::handleOTAReboot() {
-    printf("处理OTA重启请求\n");
-    
-    DynamicJsonDocument doc(256);
-    
-    if (otaManager->getStatus() == OTAStatus::SUCCESS) {
-        doc["success"] = true;
-        doc["message"] = "设备将在3秒后重启以应用新固件";
-        
-        String response;
-        serializeJson(doc, response);
-        server->send(200, "application/json", response);
-        
-        // 延时后重启设备
-        otaManager->rebootDevice();
-    } else {
-        doc["success"] = false;
-        doc["message"] = "OTA升级未成功，无法重启";
-        
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-    }
 }
 
 void WebServerManager::handleFileManager() {
@@ -1257,7 +1165,7 @@ String WebServerManager::getFileManagerHTML() {
     html += "<!DOCTYPE html>";
     html += "<html><head><meta charset='UTF-8'>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-    html += "<title>文件管理器 - ESP32S3 Monitor</title>";
+    html += "<title>文件管理器 - ESP32S3 LLM Monitor</title>";
     html += "<style>";
     html += "* {";
     html += "margin: 0;";
@@ -2303,130 +2211,6 @@ void WebServerManager::handleGetCurrentRotation() {
     server->send(200, "application/json", response);
 }
 
-void WebServerManager::handleGetThemeSettings() {
-    printf("处理获取主题设置请求\n");
-    
-    DynamicJsonDocument doc(256);
-    
-    if (!configStorage) {
-        doc["success"] = false;
-        doc["message"] = "配置存储未初始化";
-        printf("配置存储未初始化\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 获取当前主题设置
-    if (configStorage->hasThemeConfigAsync(3000)) {
-        int theme = configStorage->loadThemeConfigAsync(3000);
-        doc["success"] = true;
-        doc["theme"] = theme;
-        doc["message"] = "主题配置获取成功";
-        printf("主题配置获取成功: %d\n", theme);
-    } else {
-        doc["success"] = true;
-        doc["theme"] = 0; // 默认UI1主题
-        doc["message"] = "使用默认主题配置";
-        printf("使用默认主题配置\n");
-    }
-    
-    String response;
-    serializeJson(doc, response);
-    server->send(200, "application/json", response);
-}
-
-void WebServerManager::handleSetThemeSettings() {
-    printf("处理设置主题配置请求\n");
-    
-    DynamicJsonDocument doc(256);
-    
-    if (!configStorage) {
-        doc["success"] = false;
-        doc["message"] = "配置存储未初始化";
-        printf("配置存储未初始化\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 检查必要参数
-    if (!server->hasArg("theme")) {
-        doc["success"] = false;
-        doc["message"] = "缺少theme参数";
-        printf("缺少theme参数\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    int theme = server->arg("theme").toInt();
-    
-    printf("接收到主题切换请求：主题=%d\n", theme);
-    
-    // 参数验证
-    if (theme < 0 || theme > 2) {
-        doc["success"] = false;
-        doc["message"] = "无效的主题值";
-        printf("无效的主题值: %d\n", theme);
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 检查是否是当前主题
-    if (configStorage->hasThemeConfigAsync(3000)) {
-        int currentTheme = configStorage->loadThemeConfigAsync(3000);
-        if (currentTheme == theme) {
-            doc["success"] = true;
-            doc["message"] = "当前已是选定的主题";
-            doc["theme"] = theme;
-            doc["needRestart"] = false;
-            printf("当前已是选定的主题: %d\n", theme);
-            String response;
-            serializeJson(doc, response);
-            server->send(200, "application/json", response);
-            return;
-        }
-    }
-    
-    // 保存主题配置到NVS
-    printf("保存主题配置到NVS: %d\n", theme);
-    bool saveSuccess = configStorage->saveThemeConfigAsync(theme, 3000);
-    
-    if (saveSuccess) {
-        doc["success"] = true;
-        doc["message"] = "主题配置已保存，系统将在3秒后重启以应用新主题";
-        doc["theme"] = theme;
-        doc["needRestart"] = true;
-        doc["restartDelay"] = 3000; // 3秒延迟
-        printf("主题配置保存成功，准备重启系统\n");
-        
-        String response;
-        serializeJson(doc, response);
-        server->send(200, "application/json", response);
-        
-        // 延时3秒后重启设备以应用新主题
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        printf("重启系统以应用新主题...\n");
-        ESP.restart();
-    } else {
-        doc["success"] = false;
-        doc["message"] = "主题配置保存失败";
-        doc["theme"] = theme;
-        doc["needRestart"] = false;
-        printf("主题配置保存失败\n");
-        
-        String response;
-        serializeJson(doc, response);
-        server->send(500, "application/json", response);
-    }
-}
-
 void WebServerManager::handleSystemSettings() {
     printf("处理系统设置页面请求\n");
     server->send(200, "text/html", getSystemSettingsHTML());
@@ -2525,686 +2309,246 @@ void WebServerManager::handleSyncTime() {
     server->send(200, "application/json", response);
 }
 
-// 服务器OTA升级相关API处理函数
-void WebServerManager::handleServerOTAStart() {
-    printf("处理服务器OTA启动请求\n");
-    
-    DynamicJsonDocument doc(512);
-    
-    if (!wifiManager->isConnected()) {
-        doc["success"] = false;
-        doc["message"] = "设备未连接WiFi，无法进行服务器OTA升级";
-        printf("设备未连接WiFi，无法进行服务器OTA升级\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 默认服务器地址
-    String serverUrl = "http://ota.dlcv.com.cn";
-    String firmwareFile = "";
-    
-    // 检查是否有自定义参数
-    if (server->hasArg("serverUrl")) {
-        serverUrl = server->arg("serverUrl");
-    }
-    
-    if (server->hasArg("firmwareFile")) {
-        firmwareFile = server->arg("firmwareFile");
-    }
-    
-    printf("服务器OTA升级参数 - 服务器: %s, 固件文件: %s\n", 
-           serverUrl.c_str(), firmwareFile.c_str());
-    
-    // 首先检查服务器版本并进行版本比较
-    printf("开始版本检查...\n");
-    String versionJson = otaManager->checkServerFirmwareVersion(serverUrl);
-    
-    if (versionJson.length() == 0) {
-        doc["success"] = false;
-        doc["message"] = "无法获取服务器版本信息，升级已取消";
-        printf("无法获取服务器版本信息，升级已取消\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 解析服务器版本响应
-    DynamicJsonDocument serverDoc(512);
-    if (deserializeJson(serverDoc, versionJson) != DeserializationError::Ok) {
-        doc["success"] = false;
-        doc["message"] = "服务器版本信息解析失败，升级已取消";
-        printf("服务器版本信息解析失败，升级已取消\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 获取服务器版本号
-    String serverVersion = serverDoc["version"].as<String>();
-    if (serverVersion.length() == 0) {
-        doc["success"] = false;
-        doc["message"] = "服务器版本号为空，升级已取消";
-        printf("服务器版本号为空，升级已取消\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 进行版本比较
-    printf("进行版本比较: 当前版本=%s, 服务器版本=%s\n", 
-           VERSION_STRING, serverVersion.c_str());
-    
-    if (!otaManager->needsUpdate(serverVersion)) {
-        // 检查版本比较结果
-        int compareResult = otaManager->compareVersions(VERSION_STRING, serverVersion);
-        
-        if (compareResult == 0) {
-            // 版本相同
-            doc["success"] = false;
-            doc["message"] = "当前版本已是最新版本，无需升级";
-            doc["currentVersion"] = VERSION_STRING;
-            doc["serverVersion"] = serverVersion;
-            doc["versionStatus"] = "up_to_date";
-            printf("版本相同，无需升级: %s\n", VERSION_STRING);
-        } else if (compareResult > 0) {
-            // 当前版本更高
-            doc["success"] = false;
-            doc["message"] = "当前版本比服务器版本更新，无需升级";
-            doc["currentVersion"] = VERSION_STRING;
-            doc["serverVersion"] = serverVersion;
-            doc["versionStatus"] = "newer";
-            printf("当前版本更高，无需升级: %s > %s\n", VERSION_STRING, serverVersion.c_str());
-        }
-        
-        String response;
-        serializeJson(doc, response);
-        server->send(200, "application/json", response);
-        return;
-    }
-    
-    printf("版本检查通过，开始升级: %s -> %s\n", VERSION_STRING, serverVersion.c_str());
-    
-    // 启动服务器OTA升级
-    if (otaManager->downloadAndUpdateFromServer(serverUrl, firmwareFile)) {
-        doc["success"] = true;
-        doc["message"] = "服务器OTA升级已启动";
-        doc["serverUrl"] = serverUrl;
-        doc["firmwareFile"] = firmwareFile;
-        
-        printf("服务器OTA升级启动成功\n");
-        
-        String response;
-        serializeJson(doc, response);
-        server->send(200, "application/json", response);
-    } else {
-        doc["success"] = false;
-        doc["message"] = "服务器OTA升级启动失败";
-        doc["error"] = otaManager->getError();
-        
-        printf("服务器OTA升级启动失败: %s\n", otaManager->getError().c_str());
-        
-        String response;
-        serializeJson(doc, response);
-        server->send(500, "application/json", response);
-    }
+// 大模型设置相关API处理函数
+void WebServerManager::handleLLMSettingsPage() {
+    printf("处理大模型设置页面请求\n");
+    server->send(200, "text/html", getLLMSettingsHTML());
 }
 
-void WebServerManager::handleServerOTAStatus() {
-    printf("处理服务器OTA状态查询请求\n");
-    
-    // 获取OTA状态JSON，已经包含所有必要信息
-    String statusJson = otaManager->getStatusJSON();
-    server->send(200, "application/json", statusJson);
-}
+void WebServerManager::handleGetLLMConfig() {
+    printf("处理获取大模型配置请求\n");
 
-void WebServerManager::handleServerFirmwareList() {
-    printf("处理服务器固件列表请求\n");
-    
     DynamicJsonDocument doc(1024);
-    
-    if (!wifiManager->isConnected()) {
-        doc["success"] = false;
-        doc["message"] = "设备未连接WiFi，无法获取服务器固件列表";
-        printf("设备未连接WiFi，无法获取服务器固件列表\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 默认服务器地址
-    String serverUrl = "http://ota.dlcv.com.cn";
-    
-    // 检查是否有自定义服务器地址
-    if (server->hasArg("serverUrl")) {
-        serverUrl = server->arg("serverUrl");
-    }
-    
-    printf("从服务器获取固件列表: %s\n", serverUrl.c_str());
-    
-    // 获取服务器固件列表
-    String firmwareListJson = otaManager->getServerFirmwareList(serverUrl);
-    
-    if (firmwareListJson.length() > 0) {
-        // 解析服务器响应
-        DynamicJsonDocument serverDoc(1024);
-        if (deserializeJson(serverDoc, firmwareListJson) == DeserializationError::Ok) {
-            doc["success"] = true;
-            doc["message"] = "固件列表获取成功";
-            doc["serverUrl"] = serverUrl;
-            doc["firmwareList"] = serverDoc;
-            
-            printf("固件列表获取成功\n");
-        } else {
-            doc["success"] = false;
-            doc["message"] = "解析服务器响应失败";
-            doc["rawResponse"] = firmwareListJson;
-            
-            printf("解析服务器响应失败\n");
-        }
-    } else {
-        doc["success"] = false;
-        doc["message"] = "无法连接到服务器或服务器响应为空";
-        doc["serverUrl"] = serverUrl;
-        
-        printf("无法连接到服务器或服务器响应为空\n");
-    }
-    
-    String response;
-    serializeJson(doc, response);
-    server->send(200, "application/json", response);
-}
 
-void WebServerManager::handleServerFirmwareVersion() {
-    printf("处理服务器固件版本查询请求\n");
-    
-    DynamicJsonDocument doc(512);
-    
-    if (!wifiManager->isConnected()) {
-        doc["success"] = false;
-        doc["message"] = "设备未连接WiFi，无法查询服务器固件版本";
-        printf("设备未连接WiFi，无法查询服务器固件版本\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 默认服务器地址
-    String serverUrl = "http://ota.dlcv.com.cn";
-    
-    // 检查是否有自定义服务器地址
-    if (server->hasArg("serverUrl")) {
-        serverUrl = server->arg("serverUrl");
-    }
-    
-    printf("从服务器查询固件版本: %s\n", serverUrl.c_str());
-    
-    // 查询服务器固件版本
-    String versionJson = otaManager->checkServerFirmwareVersion(serverUrl);
-    
-    if (versionJson.length() > 0) {
-        // 解析服务器响应
-        DynamicJsonDocument serverDoc(512);
-        if (deserializeJson(serverDoc, versionJson) == DeserializationError::Ok) {
-            // 获取服务器版本号进行比较
-            String serverVersionStr = serverDoc["version"].as<String>();
-            
-            doc["success"] = true;
-            doc["message"] = "固件版本查询成功";
-            doc["serverUrl"] = serverUrl;
-            doc["currentVersion"] = VERSION_STRING;  // 当前设备版本
-            doc["serverVersion"] = serverDoc;
-            
-            // 添加版本比较结果
-            if (serverVersionStr.length() > 0) {
-                int compareResult = otaManager->compareVersions(VERSION_STRING, serverVersionStr);
-                bool needsUpdate = otaManager->needsUpdate(serverVersionStr);
-                
-                if (compareResult == 0) {
-                    doc["versionStatus"] = "up_to_date";
-                    doc["versionMessage"] = "当前版本已是最新版本";
-                    doc["canUpdate"] = false;
-                } else if (compareResult > 0) {
-                    doc["versionStatus"] = "newer";
-                    doc["versionMessage"] = "当前版本比服务器版本更新";
-                    doc["canUpdate"] = false;
-                } else {
-                    doc["versionStatus"] = "needs_update";
-                    doc["versionMessage"] = "发现新版本，可以升级";
-                    doc["canUpdate"] = true;
-                }
-                
-                doc["needsUpdate"] = needsUpdate;
-                
-                printf("版本比较结果: 当前=%s, 服务器=%s, 状态=%s\n", 
-                       VERSION_STRING, serverVersionStr.c_str(), 
-                       doc["versionStatus"].as<String>().c_str());
-            } else {
-                doc["versionStatus"] = "unknown";
-                doc["versionMessage"] = "无法获取服务器版本号";
-                doc["canUpdate"] = false;
-                doc["needsUpdate"] = false;
-            }
-            
-            printf("固件版本查询成功\n");
-        } else {
-            doc["success"] = false;
-            doc["message"] = "解析服务器响应失败";
-            doc["rawResponse"] = versionJson;
-            
-            printf("解析服务器响应失败\n");
-        }
-    } else {
-        doc["success"] = false;
-        doc["message"] = "无法连接到服务器或服务器响应为空";
-        doc["serverUrl"] = serverUrl;
-        
-        printf("无法连接到服务器或服务器响应为空\n");
-    }
-    
-    String response;
-    serializeJson(doc, response);
-    server->send(200, "application/json", response);
-}
-
-// 服务器设置相关API处理函数
-void WebServerManager::handleServerSettingsPage() {
-    printf("处理服务器设置页面请求\n");
-    server->send(200, "text/html", getServerSettingsHTML());
-}
-
-void WebServerManager::handleGetServerConfig() {
-    printf("处理获取服务器配置请求\n");
-    
-    DynamicJsonDocument doc(512);
-    
-    if (configStorage) {
-        bool hasConfig = configStorage->hasServerConfigAsync(3000);
-        
-        if (hasConfig) {
-            String serverUrl;
-            int requestInterval;
-            bool enabled;
-            int connectionTimeout;
-            bool autoGetData;
-            bool autoScanServer;
-            
-            bool success = configStorage->loadServerConfigAsync(serverUrl, requestInterval, enabled, connectionTimeout, autoGetData, autoScanServer, 3000);
-            if (success) {
-                doc["success"] = true;
-                doc["config"]["serverUrl"] = serverUrl;
-                doc["config"]["requestInterval"] = requestInterval;
-                doc["config"]["enabled"] = enabled;
-                doc["config"]["connectionTimeout"] = connectionTimeout;
-                doc["config"]["autoGetData"] = autoGetData;
-                doc["config"]["autoScanServer"] = autoScanServer;
-                doc["message"] = "服务器配置获取成功";
-                
-                printf("服务器配置获取成功：URL=%s, 间隔=%d分钟, 启用=%s, 超时=%d秒, 自动获取数据=%s, 自动扫描服务器=%s\n",
-                       serverUrl.c_str(), requestInterval,
-                       enabled ? "是" : "否", connectionTimeout,
-                       autoGetData ? "是" : "否", autoScanServer ? "是" : "否");
-            } else {
-                doc["success"] = false;
-                doc["message"] = "服务器配置加载失败";
-                printf("服务器配置加载失败\n");
-            }
-        } else {
-            // 返回默认配置
-            doc["success"] = true;
-            doc["config"]["serverUrl"] = "http://10.10.168.168/metrics.json";
-            doc["config"]["requestInterval"] = 250;
-            doc["config"]["enabled"] = true;
-            doc["config"]["connectionTimeout"] = 1000;
-            doc["config"]["autoGetData"] = true;
-            doc["config"]["autoScanServer"] = false;
-            doc["message"] = "返回默认服务器配置";
-            
-            printf("返回默认服务器配置\n");
-        }
-    } else {
-        doc["success"] = false;
-        doc["message"] = "配置存储未初始化";
-        printf("配置存储未初始化\n");
-    }
-    
-    String response;
-    serializeJson(doc, response);
-    server->send(200, "application/json", response);
-}
-
-void WebServerManager::handleSetServerConfig() {
-    printf("处理设置服务器配置请求\n");
-    
-    DynamicJsonDocument doc(256);
-    
     if (!configStorage) {
         doc["success"] = false;
         doc["message"] = "配置存储未初始化";
-        printf("配置存储未初始化\n");
         String response;
         serializeJson(doc, response);
-        server->send(400, "application/json", response);
+        server->send(500, "application/json", response);
         return;
     }
-    
-    // 检查必要参数
-    if (!server->hasArg("serverUrl")) {
-        doc["success"] = false;
-        doc["message"] = "缺少serverUrl参数";
-        printf("缺少serverUrl参数\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    String serverUrl = server->arg("serverUrl");
-    int requestInterval = server->hasArg("requestInterval") ? server->arg("requestInterval").toInt() : 250;
-    bool enabled = server->hasArg("enabled") ? (server->arg("enabled") == "true") : true;
-    int connectionTimeout = server->hasArg("connectionTimeout") ? server->arg("connectionTimeout").toInt() : 1000;
-    bool autoGetData = server->hasArg("autoGetData") ? (server->arg("autoGetData") == "true") : true;
-    bool autoScanServer = server->hasArg("autoScanServer") ? (server->arg("autoScanServer") == "true") : false;
-    
-    printf("接收到服务器配置：URL=%s, 间隔=%d毫秒, 启用=%s, 超时=%d毫秒, 自动获取数据=%s, 自动扫描服务器=%s\n",
-           serverUrl.c_str(), requestInterval,
-           enabled ? "是" : "否", connectionTimeout,
-           autoGetData ? "是" : "否", autoScanServer ? "是" : "否");
-    
-    // 参数验证
-    if (serverUrl.length() < 10 || 
-        (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://"))) {
-        doc["success"] = false;
-        doc["message"] = "无效的服务器URL";
-        printf("无效的服务器URL: %s\n", serverUrl.c_str());
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    if (requestInterval < 100 || requestInterval > 1000) {
-        doc["success"] = false;
-        doc["message"] = "请求间隔必须在100-1000毫秒之间";
-        printf("无效的请求间隔: %d\n", requestInterval);
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    if (connectionTimeout < 1000 || connectionTimeout > 60000) {
-        doc["success"] = false;
-        doc["message"] = "连接超时时间必须在1000-60000毫秒之间";
-        printf("无效的连接超时时间: %d\n", connectionTimeout);
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    // 保存配置
-    bool success = configStorage->saveServerConfigAsync(serverUrl, requestInterval, enabled, connectionTimeout, autoGetData, autoScanServer, 3000);
-    
-    doc["success"] = success;
-    if (success) {
-        doc["message"] = "服务器配置保存成功";
-        printf("服务器配置保存成功\n");
-    } else {
-        doc["message"] = "服务器配置保存失败";
-        printf("服务器配置保存失败\n");
-    }
-    
-    String response;
-    serializeJson(doc, response);
-    server->send(200, "application/json", response);
-}
 
-void WebServerManager::handleTestServerConnection() {
-    printf("处理测试服务器连接请求\n");
-    
-    DynamicJsonDocument doc(512);
-    
-    if (!wifiManager->isConnected()) {
-        doc["success"] = false;
-        doc["message"] = "设备未连接WiFi，无法测试服务器连接";
-        printf("设备未连接WiFi，无法测试服务器连接\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    String serverUrl = "";
-    if (server->hasArg("serverUrl")) {
-        serverUrl = server->arg("serverUrl");
-    } else {
-        // 从配置中获取服务器URL
-        if (configStorage) {
-            bool hasConfig = configStorage->hasServerConfigAsync(3000);
-            if (hasConfig) {
-                String configServerUrl;
-                int requestInterval;
-                bool enabled;
-                int connectionTimeout;
-                bool autoGetData;
-                bool autoScanServer;
-                bool success = configStorage->loadServerConfigAsync(configServerUrl, requestInterval, enabled, connectionTimeout, autoGetData, autoScanServer, 3000);
-                if (success) {
-                    serverUrl = configServerUrl;
-                }
-            }
-        }
-        
-        if (serverUrl.isEmpty()) {
-            serverUrl = "http://10.10.168.168/metrics.json";
-        }
-    }
-    
-    printf("测试服务器连接: %s\n", serverUrl.c_str());
-    
-    // 使用WiFiClient测试连接
-    WiFiClient client;
-    HTTPClient http;
-    
-    http.begin(client, serverUrl);
-    http.setTimeout(10000);  // 10秒超时
-    
-    int httpCode = http.GET();
-    
-    if (httpCode > 0) {
-        String payload = http.getString();
-        
-        doc["success"] = true;
-        doc["message"] = "服务器连接测试成功";
-        doc["serverUrl"] = serverUrl;
-        doc["httpCode"] = httpCode;
-        doc["responseSize"] = payload.length();
-        
-        // 尝试解析JSON响应
-        DynamicJsonDocument responseDoc(1024);
-        if (deserializeJson(responseDoc, payload) == DeserializationError::Ok) {
-            doc["responseValid"] = true;
-            doc["responseData"] = responseDoc;
-        } else {
-            doc["responseValid"] = false;
-            doc["responsePreview"] = payload.substring(0, 200);
-        }
-        
-        printf("服务器连接测试成功，HTTP状态码: %d, 响应大小: %d字节\n", httpCode, payload.length());
-    } else {
-        doc["success"] = false;
-        doc["message"] = "服务器连接测试失败";
-        doc["serverUrl"] = serverUrl;
-        doc["error"] = http.errorToString(httpCode);
-        
-        printf("服务器连接测试失败，错误: %s\n", http.errorToString(httpCode).c_str());
-    }
-    
-    http.end();
-    
-    String response;
-    serializeJson(doc, response);
-    server->send(200, "application/json", response);
-}
-
-void WebServerManager::handleGetServerData() {
-    printf("处理获取服务器数据请求\n");
-    
-    DynamicJsonDocument doc(1024);
-    
-    if (!wifiManager->isConnected()) {
-        doc["success"] = false;
-        doc["message"] = "设备未连接WiFi，无法获取服务器数据";
-        printf("设备未连接WiFi，无法获取服务器数据\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    String serverUrl = "";
-    if (server->hasArg("serverUrl")) {
-        serverUrl = server->arg("serverUrl");
-    } else {
-        // 从配置中获取服务器URL
-        if (configStorage) {
-            bool hasConfig = configStorage->hasServerConfigAsync(3000);
-            if (hasConfig) {
-                String configServerUrl;
-                int requestInterval;
-                bool enabled;
-                int connectionTimeout;
-                bool autoGetData;
-                bool autoScanServer;
-                bool success = configStorage->loadServerConfigAsync(configServerUrl, requestInterval, enabled, connectionTimeout, autoGetData, autoScanServer, 3000);
-                if (success && enabled) {
-                    serverUrl = configServerUrl;
-                }
-            }
-        }
-        
-        if (serverUrl.isEmpty()) {
-            serverUrl = "http://10.10.168.168/metrics.json";
-        }
-    }
-    
-    printf("获取服务器数据: %s\n", serverUrl.c_str());
-    
-    // 使用WiFiClient获取数据
-    WiFiClient client;
-    HTTPClient http;
-    
-    http.begin(client, serverUrl);
-    http.setTimeout(10000);  // 10秒超时
-    
-    int httpCode = http.GET();
-    
-    if (httpCode == HTTP_CODE_OK) {
-        String payload = http.getString();
-        
-        // 尝试解析JSON响应
-        DynamicJsonDocument responseDoc(1024);
-        if (deserializeJson(responseDoc, payload) == DeserializationError::Ok) {
-            doc["success"] = true;
-            doc["message"] = "服务器数据获取成功";
-            doc["serverUrl"] = serverUrl;
-            doc["timestamp"] = millis();
-            doc["data"] = responseDoc;
-            
-            printf("服务器数据获取成功，数据大小: %d字节\n", payload.length());
-        } else {
-            doc["success"] = false;
-            doc["message"] = "服务器响应不是有效的JSON格式";
-            doc["serverUrl"] = serverUrl;
-            doc["responsePreview"] = payload.substring(0, 200);
-            
-            printf("服务器响应不是有效的JSON格式\n");
-        }
-    } else {
-        doc["success"] = false;
-        doc["message"] = "服务器数据获取失败";
-        doc["serverUrl"] = serverUrl;
-        doc["httpCode"] = httpCode;
-        doc["error"] = http.errorToString(httpCode);
-        
-        printf("服务器数据获取失败，HTTP状态码: %d, 错误: %s\n", httpCode, http.errorToString(httpCode).c_str());
-    }
-    
-    http.end();
-    
-    String response;
-    serializeJson(doc, response);
-    server->send(200, "application/json", response);
-}
-
-void WebServerManager::handleMDNSScanServers() {
-    printf("处理mDNS扫描服务器请求\n");
-    
-    DynamicJsonDocument doc(2048);
-    
-    if (!wifiManager->isConnected()) {
-        doc["success"] = false;
-        doc["message"] = "设备未连接WiFi，无法进行mDNS扫描";
-        printf("设备未连接WiFi，无法进行mDNS扫描\n");
-        String response;
-        serializeJson(doc, response);
-        server->send(400, "application/json", response);
-        return;
-    }
-    
-    printf("开始mDNS扫描小电拼...\n");
-    
-    // 使用关键词搜索小电拼
-    std::vector<String> keywords;
-    keywords.push_back("cp02");
-    keywords.push_back("CP02");
-    
-    // 扫描包含cp02关键词的设备
-    std::vector<MDNSDeviceInfo> devices = UniversalMDNSScanner::findDevicesByKeywords(keywords, true);
-    
+    // 全局轮询间隔(秒)
     doc["success"] = true;
-    doc["message"] = "小电拼扫描完成";
-    doc["scanTime"] = millis();
-    doc["deviceCount"] = devices.size();
-    
-    // 创建设备列表
-    JsonArray deviceArray = doc.createNestedArray("devices");
-    
-    for (const auto& device : devices) {
-        JsonObject deviceObj = deviceArray.createNestedObject();
-        deviceObj["hostname"] = device.hostname;
-        deviceObj["ip"] = device.ip;
-        deviceObj["name"] = device.name;
-        deviceObj["port"] = device.port;
-        deviceObj["serviceType"] = device.serviceType;
-        deviceObj["isValid"] = device.isValid;
-        deviceObj["customInfo"] = device.customInfo;
-        
-        // 生成完整的服务器URL
-        String serverUrl = "http://" + device.ip;
-        if (device.port != 80) {
-            serverUrl += ":" + String(device.port);
+    doc["pollSec"] = configStorage->getIntAsync("llm_poll_sec", 60, 3000);
+
+    // 4个槽位配置(API Key 仅返回掩码, 不回传明文)
+    JsonArray slots = doc.createNestedArray("slots");
+    char keyBuf[24];
+    for (int i = 0; i < 4; i++) {
+        JsonObject slot = slots.createNestedObject();
+
+        snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_type", i);
+        slot["type"] = configStorage->getIntAsync(keyBuf, 0, 3000);
+
+        snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_key", i);
+        String apiKey = configStorage->getStringAsync(keyBuf, "", 3000);
+        slot["hasKey"] = apiKey.length() > 0;
+        if (apiKey.length() > 10) {
+            // 掩码: 前6位 + *** + 后4位
+            slot["keyMasked"] = apiKey.substring(0, 6) + "***" + apiKey.substring(apiKey.length() - 4);
+        } else if (apiKey.length() > 0) {
+            slot["keyMasked"] = String("***") + apiKey.substring(apiKey.length() - 4);
+        } else {
+            slot["keyMasked"] = "";
         }
-        serverUrl += "/metrics.json";
-        deviceObj["serverUrl"] = serverUrl;
-        
-        printf("发现小电拼: %s (%s:%d)\n", device.name.c_str(), device.ip.c_str(), device.port);
+
+        snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_price", i);
+        slot["unitPrice"] = configStorage->getStringAsync(keyBuf, "2.0", 3000);
     }
-    
-    if (deviceArray.size() == 0) {
-        doc["message"] = "未发现任何小电拼设备";
-        printf("未发现任何小电拼设备\n");
+
+    String response;
+    serializeJson(doc, response);
+    server->send(200, "application/json", response);
+}
+
+void WebServerManager::handleSetLLMConfig() {
+    printf("处理保存大模型配置请求\n");
+
+    DynamicJsonDocument doc(256);
+
+    if (!configStorage) {
+        doc["success"] = false;
+        doc["message"] = "配置存储未初始化";
+        String response;
+        serializeJson(doc, response);
+        server->send(500, "application/json", response);
+        return;
+    }
+
+    // 全局轮询间隔(30-600秒)
+    if (server->hasArg("pollSec")) {
+        int pollSec = server->arg("pollSec").toInt();
+        if (pollSec < 30 || pollSec > 600) {
+            doc["success"] = false;
+            doc["message"] = "轮询间隔必须在30-600秒之间";
+            String response;
+            serializeJson(doc, response);
+            server->send(400, "application/json", response);
+            return;
+        }
+        configStorage->putIntAsync("llm_poll_sec", pollSec, 3000);
+    }
+
+    // 槽位配置
+    char keyBuf[24];
+    for (int i = 0; i < 4; i++) {
+        String argPrefix = "slot" + String(i) + "_";
+
+        if (server->hasArg(argPrefix + "type")) {
+            int type = server->arg(argPrefix + "type").toInt();
+            if (type < 0 || type > 2) type = 0;
+            snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_type", i);
+            configStorage->putIntAsync(keyBuf, type, 3000);
+        }
+
+        if (server->hasArg(argPrefix + "key")) {
+            String apiKey = server->arg(argPrefix + "key");
+            apiKey.trim();
+            snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_key", i);
+            if (apiKey == "CLEAR") {
+                // 显式清除密钥(用空格占位, 空字符串写入会失败)
+                configStorage->putStringAsync(keyBuf, "", 3000);
+            } else if (apiKey.length() > 0) {
+                configStorage->putStringAsync(keyBuf, apiKey, 3000);
+            }
+            // 空字符串 = 保持原密钥不变
+        }
+
+        if (server->hasArg(argPrefix + "price")) {
+            String price = server->arg(argPrefix + "price");
+            price.trim();
+            if (price.length() > 0 && atof(price.c_str()) > 0) {
+                snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_price", i);
+                configStorage->putStringAsync(keyBuf, price, 3000);
+            }
+        }
+    }
+
+    // 通知监控器重新加载配置
+    if (m_llmMonitor) {
+        m_llmMonitor->reloadConfig();
+    }
+
+    doc["success"] = true;
+    doc["message"] = "大模型配置已保存";
+    String response;
+    serializeJson(doc, response);
+    server->send(200, "application/json", response);
+}
+
+void WebServerManager::handleTestLLMConnection() {
+    printf("处理大模型连接测试请求\n");
+
+    DynamicJsonDocument doc(256);
+
+    if (!m_llmMonitor) {
+        doc["success"] = false;
+        doc["message"] = "监控器未初始化";
+        String response;
+        serializeJson(doc, response);
+        server->send(500, "application/json", response);
+        return;
+    }
+
+    if (!server->hasArg("slot")) {
+        doc["success"] = false;
+        doc["message"] = "缺少slot参数";
+        String response;
+        serializeJson(doc, response);
+        server->send(400, "application/json", response);
+        return;
+    }
+
+    int slotIndex = server->arg("slot").toInt();
+    if (slotIndex < 0 || slotIndex >= 4) {
+        doc["success"] = false;
+        doc["message"] = "无效的槽位索引";
+        String response;
+        serializeJson(doc, response);
+        server->send(400, "application/json", response);
+        return;
+    }
+
+    // 读取该槽位已保存的配置
+    char keyBuf[24];
+    snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_type", slotIndex);
+    int type = configStorage->getIntAsync(keyBuf, 0, 3000);
+
+    snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_key", slotIndex);
+    String apiKey = configStorage->getStringAsync(keyBuf, "", 3000);
+
+    snprintf(keyBuf, sizeof(keyBuf), "llm_s%d_price", slotIndex);
+    double unitPrice = atof(configStorage->getStringAsync(keyBuf, "2.0", 3000).c_str());
+
+    if (type == 0) {
+        doc["success"] = false;
+        doc["message"] = "该槽位未启用, 请先选择平台并保存";
+    } else if (apiKey.length() == 0) {
+        doc["success"] = false;
+        doc["message"] = "该槽位未配置API Key";
     } else {
-        printf("小电拼扫描完成，发现 %d 个设备\n", deviceArray.size());
+        String message;
+        bool ok = m_llmMonitor->testProvider((ProviderType)type, apiKey, unitPrice, message);
+        doc["success"] = ok;
+        doc["message"] = message;
     }
-    
+
+    String response;
+    serializeJson(doc, response);
+    server->send(200, "application/json", response);
+}
+
+void WebServerManager::handleGetLLMStatus() {
+    // 返回当前各平台用量状态(供设置页实时预览)
+    DynamicJsonDocument doc(2048);
+
+    if (!m_llmMonitor) {
+        doc["success"] = false;
+        doc["message"] = "监控器未初始化";
+        String response;
+        serializeJson(doc, response);
+        server->send(500, "application/json", response);
+        return;
+    }
+
+    const LLMUsageData& data = m_llmMonitor->getCurrentUsageData();
+
+    doc["success"] = true;
+    doc["valid"] = data.valid;
+    doc["totalCostToday"] = data.total_cost_today;
+    doc["totalBalance"] = data.total_balance;
+
+    JsonArray providers = doc.createNestedArray("providers");
+    for (int i = 0; i < 4; i++) {
+        const ProviderData& p = data.providers[i];
+        JsonObject obj = providers.createNestedObject();
+        obj["type"] = (int)p.type;
+        obj["name"] = p.name;
+        obj["enabled"] = p.enabled;
+        obj["valid"] = p.valid;
+        obj["state"] = p.state;
+        obj["updated"] = p.updated;
+
+        if (p.type == PROVIDER_DEEPSEEK) {
+            obj["balance"] = p.balance;
+            obj["cashBalance"] = p.cash_balance;
+            obj["voucherBalance"] = p.voucher_balance;
+            obj["costToday"] = p.cost_today;
+            obj["costTotal"] = p.cost_total;
+            obj["unitPrice"] = p.unit_price;
+            obj["estTokensToday"] = (unsigned long long)p.est_tokens_today;
+        } else if (p.type == PROVIDER_KIMICODE) {
+            obj["weeklyUsed"] = p.weekly_used;
+            obj["weeklyLimit"] = p.weekly_limit;
+            obj["win5hUsed"] = p.win5h_used;
+            obj["win5hLimit"] = p.win5h_limit;
+            obj["weeklyReset"] = p.weekly_reset;
+            obj["win5hReset"] = p.win5h_reset;
+        }
+    }
+
     String response;
     serializeJson(doc, response);
     server->send(200, "application/json", response);

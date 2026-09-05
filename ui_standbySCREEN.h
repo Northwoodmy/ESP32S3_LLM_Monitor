@@ -27,6 +27,7 @@ extern lv_obj_t * ui_Label9;
 extern lv_obj_t * ui_weatherLabel;
 extern lv_obj_t * ui_Container67;
 extern lv_obj_t * ui_weekLabel;
+extern lv_obj_t * ui_costLabel;
 // CUSTOM VARIABLES
 
 #ifdef __cplusplus
